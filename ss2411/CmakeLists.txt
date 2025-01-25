@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.10)
+
+# プロジェクト名と C++ のバージョンを指定
+project(ss2411)
+set(CMAKE_CXX_STANDARD 14)
+
+# OpenCV のパスを指定
+set(OpenCV_DIR "C:/opencv/build")
+find_package(OpenCV REQUIRED)
+
+# ZeroMQ のパスを指定する
+set(ZeroMQ_DIR "C:/Users/takos/source/repos/ss2411/vcpkg/installed/x64-windows")
+find_path(ZeroMQ_INCLUDE_DIR zmq.hpp PATHS ${ZeroMQ_DIR}/include)
+find_library(ZeroMQ_LIBRARY NAMES libzmq-mt-4_3_5 PATHS ${ZeroMQ_DIR}/lib)
+
+# インクルードディレクトリを指定
+include_directories(${OpenCV_INCLUDE_DIRS} ${ZeroMQ_INCLUDE_DIR})
+
+# 実行ファイルを指定
+add_executable(ss2411 ss2411.cpp)
+
+# リンクするライブラリを指定
+target_link_libraries(ss2411 ${OpenCV_LIBS} ${ZeroMQ_LIBRARY})
