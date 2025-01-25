@@ -17,8 +17,14 @@ int main()
 
     // ZMQ setup
     zmq::context_t context(1);
+
+    // c++からpythonへ画像を送信するソケット
     zmq::socket_t socket(context, ZMQ_PUB);  // PUBLISHERソケットに変更
     socket.bind("tcp://*:5555");             // bindに変更
+
+    // c#からc++へプログラムの開始終了を受け取るソケット
+    zmq::socket_t socket(context, ZMQ_PUB); 
+    socket.bind("tcp://*:5557");
 
     cv::Mat frame;
     cout << "aaa" << endl;

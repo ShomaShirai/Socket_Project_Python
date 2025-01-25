@@ -5,12 +5,19 @@ import numpy as np
 def main():
     # ZMQ セットアップ
     context = zmq.Context()
+
+    # c++からpythonへ画像を受け取るソケット
     socket = context.socket(zmq.SUB)
     socket.connect("tcp://localhost:5555")
     socket.setsockopt_string(zmq.SUBSCRIBE, "")  # すべてのメッセージを購読
 
+    # pythonからc++へ画像を送信するソケット
     publisher = context.socket(zmq.PUB)
     publisher.bind("tcp://localhost:5556")
+
+    # c#からpythonへプログラムの開始終了を受け取るソケット
+    subscriber = context.socket(zmq.SUB)
+    publisher.bind("tcp://localhost:5558")
 
     print("サーバー起動中...")
 
