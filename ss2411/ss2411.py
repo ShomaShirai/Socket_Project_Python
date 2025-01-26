@@ -2,6 +2,11 @@
 import cv2
 import numpy as np
 import threading
+import torch
+from torchvision.models.detection import keypointrcnn_resnet50_fpn, KeypointRCNN_ResNet50_FPN_Weights
+import torchvision
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 
 def receive_end_message(subscriber, stop_event):
@@ -20,7 +25,32 @@ def receive_end_message(subscriber, stop_event):
             pass  # メッセージがない場合はスルー
 
 
-def main():
+async def pose_detect_async(frame, model, transform, loop):
+    """
+    非同期で姿勢推定を行う関数
+    """
+    # フレームをPIL形式に変換
+    pil_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_img = torchvision.transforms.ToPILImage()(pil_img)
+
+    # 画像をモデルに入力できる形式に変換
+    tensor_img = transform(pil_img).unsqueeze(0)  # バッチ次元を追加
+
+    # 姿勢推定を実行（モデル推論を非同期で処理）
+    with torch.no_grad():
+        outputs = await loop.run_in_executor(None, model, tensor_img)
+
+    # 予測結果のキーポイントを描画
+    for output in outputs:
+        if 'keypoints' in output:
+            keypoints = output['keypoints'].cpu().detach().numpy()
+            for keypoint in keypoints:
+                for x, y, conf in keypoint:
+                    if conf > 0.5:  # 信頼度が高い場合のみ描画
+                        cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 0), -1)
+    return frame
+
+async def main():
     # ZMQ セットアップ
     context = zmq.Context()
 
@@ -51,6 +81,19 @@ def main():
 
     print("サーバー起動中...")
 
+    # モデルと変換の初期化
+    weights = torchvision.models.detection.KeypointRCNN_ResNet50_FPN_Weights.DEFAULT
+    model = torchvision.models.detection.keypointrcnn_resnet50_fpn(weights=weights)
+    model.eval()  # 評価モードに切り替え
+
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.Resize((256, 256)),
+        torchvision.transforms.ToTensor(),
+    ])
+
+    # 非同期ループ用のスレッドプール
+    loop = asyncio.get_event_loop()
+
     try:
         while not stop_event.is_set():
             try:
@@ -62,6 +105,9 @@ def main():
 
                 # numpy配列を画像にデコード
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                # 非同期で姿勢推定を実行
+                frame = await pose_detect_async(frame, model, transform, loop)
 
                 # 画像をC#に送信するためにJPEG形式で再エンコード
                 _, encoded_frame = cv2.imencode('.jpg', frame)
@@ -83,4 +129,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
