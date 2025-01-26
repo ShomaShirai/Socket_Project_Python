@@ -8,3 +8,5 @@ imageio
 opencv-python
 opencv-contrib-python 
 pyzmq
+torch
+torchvision
