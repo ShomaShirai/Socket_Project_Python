@@ -30,6 +30,10 @@
 - Cmakeを使う癖をつける
 - cppZmqとzeromqはvcpkg(pythonでいうpip)でインストールするようにする
 - Cmakeを使って依存ファイルの設定をしないとエラーが出続ける．
+- WSL2でカメラ起動をしようとすると新たにGeneratorをインストールする必要があるから，OSはWindowsで行う．
+- Windowsでのpythonのインストールや仮想環境を作るのは簡単
+- WindowsでC＋＋の環境構築はMinGW64というコンパイラーが良い
+- Windowsでの環境変数の設定を忘れない(パスを通す)
 
 ## 実行方法
 ss2408.cppとCMakeLists.txtが存在するディレクトリに移動する
