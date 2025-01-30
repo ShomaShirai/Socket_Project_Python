@@ -3,10 +3,6 @@ import cv2
 import numpy as np
 import threading
 import torch
-from torchvision.models.detection import keypointrcnn_resnet50_fpn, KeypointRCNN_ResNet50_FPN_Weights
-import torchvision
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
 
 def receive_end_message(subscriber, stop_event):
@@ -24,33 +20,25 @@ def receive_end_message(subscriber, stop_event):
         except zmq.Again:
             pass  # メッセージがない場合はスルー
 
-
-async def pose_detect_async(frame, model, transform, loop):
+def draw_detections(frame, results):
     """
-    非同期で姿勢推定を行う関数
+    YOLOv5の検出結果をフレームに描画する
     """
-    # フレームをPIL形式に変換
-    pil_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    pil_img = torchvision.transforms.ToPILImage()(pil_img)
-
-    # 画像をモデルに入力できる形式に変換
-    tensor_img = transform(pil_img).unsqueeze(0)  # バッチ次元を追加
-
-    # 姿勢推定を実行（モデル推論を非同期で処理）
-    with torch.no_grad():
-        outputs = await loop.run_in_executor(None, model, tensor_img)
-
-    # 予測結果のキーポイントを描画
-    for output in outputs:
-        if 'keypoints' in output:
-            keypoints = output['keypoints'].cpu().detach().numpy()
-            for keypoint in keypoints:
-                for x, y, conf in keypoint:
-                    if conf > 0.5:  # 信頼度が高い場合のみ描画
-                        cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 0), -1)
+    for det in results.xyxy[0]:  # 各検出結果に対してループ
+        x1, y1, x2, y2, conf, cls = det.cpu().numpy()
+        label = f"{results.names[int(cls)]}: {conf:.2f}"
+        
+        # バウンディングボックスを描画
+        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+        
+        # ラベルを描画
+        cv2.putText(frame, label, (int(x1), int(y1) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    
     return frame
 
-async def main():
+
+def main():
     # ZMQ セットアップ
     context = zmq.Context()
 
@@ -81,18 +69,9 @@ async def main():
 
     print("サーバー起動中...")
 
-    # モデルと変換の初期化
-    weights = torchvision.models.detection.KeypointRCNN_ResNet50_FPN_Weights.DEFAULT
-    model = torchvision.models.detection.keypointrcnn_resnet50_fpn(weights=weights)
-    model.eval()  # 評価モードに切り替え
-
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.Resize((256, 256)),
-        torchvision.transforms.ToTensor(),
-    ])
-
-    # 非同期ループ用のスレッドプール
-    loop = asyncio.get_event_loop()
+    # モデルのロード
+    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+    model.eval()
 
     try:
         while not stop_event.is_set():
@@ -106,12 +85,16 @@ async def main():
                 # numpy配列を画像にデコード
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-                # 非同期で姿勢推定を実行
-                frame = await pose_detect_async(frame, model, transform, loop)
+                # 画像をモデルに入力
+                results = model(frame)
+
+                # 検出結果を描画
+                frame = draw_detections(frame, results)
 
                 # 画像をC#に送信するためにJPEG形式で再エンコード
                 _, encoded_frame = cv2.imencode('.jpg', frame)
                 publisher.send(encoded_frame.tobytes())
+
             except zmq.Again:
                 pass  # 画像がまだ来ていない場合はスルー
 
@@ -129,4 +112,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
